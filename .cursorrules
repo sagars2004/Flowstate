@@ -1,0 +1,733 @@
+# Flowstate - Cursor AI Rules
+
+## Project Context
+This is Flowstate, a local-first productivity intelligence system with Chrome extension monitoring, AI-powered interventions via Groq API, and comprehensive analytics. The codebase is a TypeScript monorepo with React frontend, Express backend, and Chrome Manifest V3 extension.
+
+## Architecture Patterns
+
+### Monorepo Structure
+- Three workspaces: `frontend/`, `backend/`, `extension/`
+- Shared types in `shared/types/`
+- Each workspace has its own package.json and tsconfig.json
+- Root-level scripts for coordinated builds and dev servers
+
+### Backend Architecture
+- **Layered Architecture**:
+  - Routes layer: Handle HTTP requests, validation
+  - Service layer: Business logic, orchestration
+  - Repository layer: Database access
+  - AI layer: Groq API integration, pattern analysis
+  - WebSocket layer: Real-time communication
+- **Repository Pattern**: All database queries go through repository classes
+- **Dependency Injection**: Services receive dependencies via constructor
+
+### Frontend Architecture
+- **Component Structure**: Atomic design (atoms, molecules, organisms, pages)
+- **State Management**: React Context API for global state (Session, WebSocket)
+- **Custom Hooks**: Reusable logic extracted into hooks/
+- **Real-Time Updates**: WebSocket context provider for live data
+
+### Chrome Extension Architecture
+- **Service Worker**: Background monitoring, WebSocket connection to backend
+- **Content Scripts**: Injected into pages for typing velocity measurement
+- **Popup**: User interface for session control
+- **Message Passing**: Use chrome.runtime.sendMessage for extension internal communication
+
+## TypeScript Standards
+
+### Strict Configuration
+```typescript
+// Always enable strict mode
+"strict": true,
+"noImplicitAny": true,
+"strictNullChecks": true,
+"strictFunctionTypes": true,
+"noUnusedLocals": true,
+"noUnusedParameters": true
+```
+
+### Type Preferences
+- **Interfaces over Types**: Use `interface` for object shapes, `type` for unions/intersections
+- **Explicit Return Types**: Always specify return types for functions
+- **No `any` Types**: Use `unknown` if type is truly unknown, then narrow with type guards
+- **Prefer Readonly**: Use `readonly` for arrays/objects that shouldn't be mutated
+
+### Type Examples
+```typescript
+// ✅ GOOD: Explicit, type-safe
+interface SessionData {
+  readonly id: string;
+  startTime: Date;
+  endTime: Date | null;
+  focusScore: number;
+}
+
+function calculateFocusScore(session: SessionData): number {
+  // implementation
+}
+
+// ❌ BAD: Implicit any, no return type
+function calculateFocusScore(session) {
+  // implementation
+}
+```
+
+## React Patterns
+
+### Component Standards
+- **Functional Components Only**: No class components
+- **Props Interfaces**: Define above component, named `[ComponentName]Props`
+- **Default Exports**: Use default export for pages, named exports for components
+- **File Naming**: PascalCase for components (Button.tsx), camelCase for utilities
+
+### Component Example
+```typescript
+// ✅ GOOD: Props interface, explicit typing, functional component
+interface MetricsCardProps {
+  readonly title: string;
+  readonly value: number;
+  readonly unit: string;
+  readonly trend?: 'up' | 'down' | 'neutral';
+}
+
+export function MetricsCard({ title, value, unit, trend = 'neutral' }: MetricsCardProps): JSX.Element {
+  return (
+    <div className="metrics-card">
+      <h3>{title}</h3>
+      <p>{value} {unit}</p>
+    </div>
+  );
+}
+
+// ❌ BAD: No props interface, inline types
+export function MetricsCard({ title, value, unit }: { title: string; value: number; unit: string }) {
+  return <div>...</div>;
+}
+```
+
+### Hooks Guidelines
+- **Custom Hooks**: Must start with `use` prefix
+- **Hook Dependencies**: Always include all dependencies in useEffect/useMemo/useCallback
+- **Cleanup**: Always return cleanup function from useEffect when needed
+- **Ref Typing**: Use `useRef<HTMLElement>(null)` pattern
+
+### Context Pattern
+```typescript
+// ✅ GOOD: Full context setup with types
+interface SessionContextValue {
+  sessionId: string | null;
+  isActive: boolean;
+  startSession: () => Promise<void>;
+  endSession: () => Promise<void>;
+}
+
+const SessionContext = createContext<SessionContextValue | undefined>(undefined);
+
+export function useSession(): SessionContextValue {
+  const context = useContext(SessionContext);
+  if (!context) {
+    throw new Error('useSession must be used within SessionProvider');
+  }
+  return context;
+}
+
+export function SessionProvider({ children }: { children: ReactNode }): JSX.Element {
+  // implementation
+}
+```
+
+## Backend Patterns
+
+### Express Structure
+- **Async Route Handlers**: Always use async/await, wrap in error handler
+- **Middleware Order**: helmet → cors → json → morgan → routes → error handler
+- **Error Handling**: Custom error classes with status codes
+- **Validation**: Validate request body/params at route entry
+
+### Route Handler Pattern
+```typescript
+// ✅ GOOD: Typed request/response, async/await, error handling
+import { Request, Response, NextFunction } from 'express';
+
+interface CreateSessionRequest {
+  userId?: string;
+  startTime: string;
+}
+
+export async function createSession(
+  req: Request<{}, {}, CreateSessionRequest>,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const { userId, startTime } = req.body;
+    const session = await sessionService.create({ userId, startTime: new Date(startTime) });
+    res.status(201).json({ success: true, data: session });
+  } catch (error) {
+    next(error);
+  }
+}
+
+// ❌ BAD: No types, no error handling
+export async function createSession(req, res) {
+  const session = await sessionService.create(req.body);
+  res.json(session);
+}
+```
+
+### Repository Pattern
+```typescript
+// ✅ GOOD: Repository encapsulates database logic
+export class SessionRepository {
+  constructor(private readonly db: Database) {}
+
+  async create(data: CreateSessionData): Promise<Session> {
+    const query = `INSERT INTO sessions (id, start_time, status) VALUES (?, ?, ?)`;
+    const result = await this.db.run(query, [data.id, data.startTime, 'active']);
+    return this.findById(data.id);
+  }
+
+  async findById(id: string): Promise<Session | null> {
+    const query = `SELECT * FROM sessions WHERE id = ?`;
+    const row = await this.db.get(query, [id]);
+    return row ? this.mapToSession(row) : null;
+  }
+
+  private mapToSession(row: any): Session {
+    return {
+      id: row.id,
+      startTime: new Date(row.start_time),
+      endTime: row.end_time ? new Date(row.end_time) : null,
+      focusScore: row.focus_score,
+      status: row.status
+    };
+  }
+}
+```
+
+### Service Pattern
+```typescript
+// ✅ GOOD: Service orchestrates business logic
+export class SessionService {
+  constructor(
+    private readonly sessionRepository: SessionRepository,
+    private readonly activityRepository: ActivityRepository,
+    private readonly groqClient: GroqClient
+  ) {}
+
+  async endSession(sessionId: string): Promise<SessionWithInsights> {
+    const session = await this.sessionRepository.findById(sessionId);
+    if (!session) {
+      throw new NotFoundError(`Session ${sessionId} not found`);
+    }
+
+    const activities = await this.activityRepository.findBySessionId(sessionId);
+    const focusScore = this.calculateFocusScore(activities);
+    
+    const updatedSession = await this.sessionRepository.update(sessionId, {
+      endTime: new Date(),
+      focusScore,
+      status: 'completed'
+    });
+
+    const insights = await this.groqClient.analyzeSession(updatedSession, activities);
+    return { ...updatedSession, insights };
+  }
+
+  private calculateFocusScore(activities: Activity[]): number {
+    // Focus score calculation logic
+  }
+}
+```
+
+## Naming Conventions
+
+### General Rules
+- **PascalCase**: Components, Interfaces, Types, Classes, Enums
+- **camelCase**: Functions, variables, methods, hooks
+- **UPPER_SNAKE_CASE**: Constants, environment variables
+- **kebab-case**: File names for non-components, CSS classes
+
+### Specific Patterns
+```typescript
+// Components & Types
+interface SessionData { }
+type FocusState = 'deep' | 'moderate' | 'distracted';
+class SessionService { }
+export function MetricsCard(): JSX.Element { }
+
+// Functions & Variables
+function calculateFocusScore(session: SessionData): number { }
+const sessionData = await fetchSession();
+const isSessionActive = checkSessionStatus();
+
+// Constants
+const DEFAULT_SESSION_DURATION = 3600;
+const MAX_INTERVENTIONS_PER_HOUR = 5;
+const API_BASE_URL = process.env.VITE_API_URL;
+
+// Files
+// components: MetricsCard.tsx, SessionList.tsx
+// utilities: sessionHelpers.ts, dateUtils.ts
+// hooks: useSession.ts, useWebSocket.ts
+```
+
+### Descriptive Naming
+```typescript
+// ✅ GOOD: Clear, descriptive names
+const userTypingVelocity = calculateTypingVelocity(keypressEvents);
+const hasExceededContextSwitchThreshold = tabSwitches > MAX_CONTEXT_SWITCHES;
+function generateInterventionMessage(pattern: DistractionPattern): string { }
+
+// ❌ BAD: Unclear, abbreviated
+const vel = calc(events);
+const flag = switches > MAX;
+function genMsg(p: any): string { }
+```
+
+## Error Handling
+
+### Custom Error Classes
+```typescript
+// ✅ GOOD: Typed error hierarchy
+export class AppError extends Error {
+  constructor(
+    public readonly message: string,
+    public readonly statusCode: number,
+    public readonly isOperational: boolean = true
+  ) {
+    super(message);
+    this.name = this.constructor.name;
+    Error.captureStackTrace(this, this.constructor);
+  }
+}
+
+export class NotFoundError extends AppError {
+  constructor(message: string) {
+    super(message, 404);
+  }
+}
+
+export class ValidationError extends AppError {
+  constructor(message: string) {
+    super(message, 400);
+  }
+}
+
+export class GroqAPIError extends AppError {
+  constructor(message: string) {
+    super(message, 502);
+  }
+}
+```
+
+### Try-Catch Pattern
+```typescript
+// ✅ GOOD: Specific error handling, proper logging
+async function fetchSessionData(sessionId: string): Promise<Session> {
+  try {
+    const session = await sessionRepository.findById(sessionId);
+    if (!session) {
+      throw new NotFoundError(`Session ${sessionId} not found`);
+    }
+    return session;
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+    logger.error(`Unexpected error fetching session ${sessionId}:`, error);
+    throw new AppError('Failed to fetch session data', 500);
+  }
+}
+
+// ❌ BAD: Generic catch, console.log
+async function fetchSessionData(sessionId: string) {
+  try {
+    return await sessionRepository.findById(sessionId);
+  } catch (error) {
+    console.log('Error:', error);
+    return null;
+  }
+}
+```
+
+### Express Error Handler
+```typescript
+// ✅ GOOD: Global error handler middleware
+export function errorHandler(
+  err: Error,
+  req: Request,
+  res: Response,
+  next: NextFunction
+): void {
+  if (err instanceof AppError) {
+    res.status(err.statusCode).json({
+      success: false,
+      error: {
+        message: err.message,
+        ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+      }
+    });
+    return;
+  }
+
+  logger.error('Unexpected error:', err);
+  res.status(500).json({
+    success: false,
+    error: {
+      message: 'Internal server error'
+    }
+  });
+}
+```
+
+## Privacy Requirements
+
+### Data Collection Rules
+- **NEVER log actual typed content**: Only metadata (keypress frequency, timing)
+- **Sanitize URLs**: Remove query parameters, auth tokens before storage
+- **Anonymize AI requests**: Only send behavioral patterns, no personal identifiers
+- **User consent**: Clear disclosure of what's tracked in onboarding
+
+### Privacy-Safe Patterns
+```typescript
+// ✅ GOOD: Only metadata, no content
+interface TypingEvent {
+  readonly timestamp: number;
+  readonly velocity: number; // keypresses per minute
+  readonly duration: number; // milliseconds of typing burst
+  // NO content field!
+}
+
+// ✅ GOOD: URL sanitization
+function sanitizeURL(url: string): string {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.protocol}//${parsed.hostname}${parsed.pathname}`;
+  } catch {
+    return 'invalid-url';
+  }
+}
+
+// ✅ GOOD: Anonymized AI prompt
+const prompt = `
+Analyze this behavioral pattern:
+- Context switches: 8 in 5 minutes
+- Sites visited: twitter.com (5x), github.com (2x)
+- Typing velocity: decreased 40% over period
+Generate a supportive intervention message.
+`;
+
+// ❌ BAD: Including actual content
+interface TypingEvent {
+  content: string; // NEVER DO THIS
+  timestamp: number;
+}
+
+// ❌ BAD: Full URL with query params
+const activityLog = {
+  url: 'https://example.com/dashboard?userId=123&sessionToken=abc'
+};
+```
+
+## File Structure Standards
+
+### Directory Organization
+```
+frontend/src/
+├── components/       # Reusable UI components
+│   ├── atoms/       # Basic building blocks (Button, Input)
+│   ├── molecules/   # Composed components (MetricsCard, SearchBar)
+│   └── organisms/   # Complex components (SessionList, FocusTimeline)
+├── pages/           # Route pages (Dashboard, LiveSession, Report)
+├── context/         # React Context providers
+├── hooks/           # Custom React hooks
+├── utils/           # Utility functions
+├── types/           # TypeScript type definitions
+└── App.tsx          # Root component
+
+backend/src/
+├── routes/          # Express route handlers
+├── services/        # Business logic layer
+├── repositories/    # Database access layer
+├── ai/              # Groq API integration
+├── websocket/       # Socket.io handlers
+├── db/              # Database setup & migrations
+├── middleware/      # Express middleware
+├── types/           # TypeScript types
+└── server.ts        # Server entry point
+
+extension/
+├── background/      # Service worker
+├── content/         # Content scripts
+├── popup/           # Extension popup UI
+├── types/           # TypeScript types
+└── manifest.json    # Extension configuration
+```
+
+### File Naming Rules
+- **One component per file**: `MetricsCard.tsx` exports only `MetricsCard`
+- **Index files for clean imports**: `components/index.ts` re-exports all components
+- **Co-locate types**: Types used only in one file should be defined in that file
+- **Shared types**: Types used across files go in `types/` directory
+
+## Code Quality Standards
+
+### Comments & Documentation
+```typescript
+// ✅ GOOD: Explain WHY, not WHAT
+// Use 5-minute window for context-switch detection to avoid false positives
+// from quick reference lookups (e.g., checking documentation)
+const CONTEXT_SWITCH_WINDOW_MS = 5 * 60 * 1000;
+
+// Calculate focus score using weighted average:
+// - Typing consistency (40%): Steady rhythm indicates flow
+// - Low context-switching (30%): Fewer switches = deeper focus
+// - Minimal idle time (20%): Active engagement
+// - Site focus (10%): Time on productive vs. distracting sites
+function calculateFocusScore(activities: Activity[]): number {
+  // implementation
+}
+
+// ❌ BAD: Redundant comment explaining obvious code
+// Set the constant to 5 minutes in milliseconds
+const CONTEXT_SWITCH_WINDOW_MS = 5 * 60 * 1000;
+```
+
+### DRY Principle
+```typescript
+// ✅ GOOD: Extracted reusable utility
+function formatTimestamp(date: Date): string {
+  return date.toISOString();
+}
+
+const formattedStart = formatTimestamp(session.startTime);
+const formattedEnd = formatTimestamp(session.endTime);
+
+// ❌ BAD: Repeated logic
+const formattedStart = session.startTime.toISOString();
+const formattedEnd = session.endTime.toISOString();
+```
+
+### Code Length Guidelines
+- **Functions**: Max 50 lines (extract helpers if longer)
+- **Components**: Max 200 lines (extract sub-components if longer)
+- **Files**: Max 500 lines (split into multiple files if longer)
+
+## WebSocket Patterns
+
+### Event Naming Convention
+```typescript
+// Pattern: <entity>:<action>
+const WEBSOCKET_EVENTS = {
+  // Client → Server
+  SESSION_START: 'session:start',
+  SESSION_END: 'session:end',
+  ACTIVITY_LOG: 'activity:log',
+  
+  // Server → Client
+  INTERVENTION_SEND: 'intervention:send',
+  SESSION_UPDATE: 'session:update',
+  FOCUS_SCORE_UPDATE: 'focus:update',
+  
+  // Bidirectional
+  CONNECTION_STATUS: 'connection:status',
+  ERROR: 'error'
+} as const;
+```
+
+### Socket.io Event Handlers
+```typescript
+// ✅ GOOD: Typed events, error handling
+interface ActivityLogPayload {
+  sessionId: string;
+  eventType: 'typing' | 'tab_switch' | 'idle';
+  timestamp: number;
+  metadata: Record<string, unknown>;
+}
+
+socket.on(WEBSOCKET_EVENTS.ACTIVITY_LOG, async (payload: ActivityLogPayload) => {
+  try {
+    await activityService.log(payload);
+    socket.emit(WEBSOCKET_EVENTS.SESSION_UPDATE, { success: true });
+  } catch (error) {
+    logger.error('Failed to log activity:', error);
+    socket.emit(WEBSOCKET_EVENTS.ERROR, { message: 'Failed to log activity' });
+  }
+});
+
+// ❌ BAD: Untyped, no error handling
+socket.on('log', async (data) => {
+  await activityService.log(data);
+});
+```
+
+## Testing Standards
+
+### Unit Test Structure
+```typescript
+// ✅ GOOD: Clear arrange-act-assert structure
+describe('SessionService', () => {
+  describe('calculateFocusScore', () => {
+    it('should return high score for consistent typing with low context-switching', () => {
+      // Arrange
+      const activities: Activity[] = [
+        { type: 'typing', velocity: 180, timestamp: 1000 },
+        { type: 'typing', velocity: 185, timestamp: 2000 },
+        { type: 'typing', velocity: 175, timestamp: 3000 }
+      ];
+
+      // Act
+      const score = sessionService.calculateFocusScore(activities);
+
+      // Assert
+      expect(score).toBeGreaterThan(80);
+    });
+  });
+});
+```
+
+## Imports Organization
+
+### Import Order
+```typescript
+// 1. External libraries
+import React, { useState, useEffect } from 'react';
+import { io, Socket } from 'socket.io-client';
+
+// 2. Internal absolute imports (using path aliases)
+import { SessionContext } from '@/context/SessionContext';
+import { useWebSocket } from '@/hooks/useWebSocket';
+
+// 3. Relative imports (components, utilities)
+import { MetricsCard } from '../components/MetricsCard';
+import { calculateFocusScore } from '../utils/sessionHelpers';
+
+// 4. Type imports (grouped separately)
+import type { Session, Activity } from '@/types/session';
+
+// 5. Styles
+import './Dashboard.css';
+```
+
+## Chrome Extension Specific
+
+### Manifest V3 Patterns
+```typescript
+// ✅ GOOD: Proper service worker pattern
+// background/serviceWorker.ts
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('Flowstate extension installed');
+});
+
+// Use alarms for periodic tasks (timers don't survive service worker sleep)
+chrome.alarms.create('checkFocus', { periodInMinutes: 1 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === 'checkFocus') {
+    // Check focus logic
+  }
+});
+```
+
+### Message Passing
+```typescript
+// ✅ GOOD: Typed message passing
+interface ExtensionMessage {
+  type: 'START_SESSION' | 'END_SESSION' | 'LOG_ACTIVITY';
+  payload: unknown;
+}
+
+// Sender
+chrome.runtime.sendMessage<ExtensionMessage>(
+  { type: 'START_SESSION', payload: { timestamp: Date.now() } },
+  (response) => {
+    console.log('Session started:', response);
+  }
+);
+
+// Receiver
+chrome.runtime.onMessage.addListener((message: ExtensionMessage, sender, sendResponse) => {
+  if (message.type === 'START_SESSION') {
+    startSession(message.payload).then(sendResponse);
+    return true; // Keep message channel open for async response
+  }
+});
+```
+
+## Environment Variables
+
+### Naming & Usage
+```typescript
+// ✅ GOOD: Typed environment variables
+interface EnvironmentVariables {
+  readonly GROQ_API_KEY: string;
+  readonly DATABASE_PATH: string;
+  readonly PORT: number;
+  readonly NODE_ENV: 'development' | 'production' | 'test';
+}
+
+function loadEnv(): EnvironmentVariables {
+  const requiredVars = ['GROQ_API_KEY', 'DATABASE_PATH'];
+  for (const varName of requiredVars) {
+    if (!process.env[varName]) {
+      throw new Error(`Missing required environment variable: ${varName}`);
+    }
+  }
+
+  return {
+    GROQ_API_KEY: process.env.GROQ_API_KEY!,
+    DATABASE_PATH: process.env.DATABASE_PATH!,
+    PORT: parseInt(process.env.PORT || '3001', 10),
+    NODE_ENV: (process.env.NODE_ENV as any) || 'development'
+  };
+}
+
+export const env = loadEnv();
+```
+
+## Performance Considerations
+
+### Optimization Patterns
+- **React.memo**: Memoize components that receive stable props
+- **useMemo**: Cache expensive calculations
+- **useCallback**: Stabilize callback references
+- **Debounce**: For high-frequency events (typing, scrolling)
+- **Lazy Loading**: Use React.lazy() for route-based code splitting
+
+```typescript
+// ✅ GOOD: Memoized component with stable callback
+const MetricsCard = React.memo<MetricsCardProps>(({ title, value, onChange }) => {
+  return <div onClick={onChange}>{title}: {value}</div>;
+});
+
+// Parent component
+function Dashboard(): JSX.Element {
+  const [count, setCount] = useState(0);
+  
+  // Stable callback reference
+  const handleChange = useCallback(() => {
+    setCount(c => c + 1);
+  }, []);
+
+  return <MetricsCard title="Sessions" value={count} onChange={handleChange} />;
+}
+```
+
+## Final Principles
+
+1. **Type Safety First**: Leverage TypeScript's type system fully
+2. **Privacy by Design**: Never capture content, always sanitize data
+3. **Explicit Over Implicit**: Clear code beats clever code
+4. **Error Handling**: Always handle errors gracefully
+5. **Consistent Style**: Follow these rules consistently across the codebase
+6. **Test Coverage**: Write tests for business logic and utilities
+7. **Documentation**: Comment WHY, not WHAT
+8. **Performance**: Optimize after measuring, not prematurely
+
+## When in Doubt
+
+- Prefer readability over brevity
+- Prefer type safety over flexibility
+- Prefer explicit error handling over silent failures
+- Prefer established patterns over novel approaches
+- Refer to the PRD and RFCs for architectural decisions
