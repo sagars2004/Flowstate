@@ -1,0 +1,42 @@
+{
+  "name": "flowstate",
+  "version": "1.0.0",
+  "description": "Local-first productivity intelligence system with AI-powered focus interventions",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend",
+    "extension",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:extension": "npm run dev --workspace=extension",
+    "build": "npm run build --workspaces --if-present",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "build:extension": "npm run build --workspace=extension",
+    "clean": "rm -rf node_modules frontend/node_modules backend/node_modules extension/node_modules shared/node_modules",
+    "lint": "npm run lint --workspaces --if-present",
+    "type-check": "npm run type-check --workspaces --if-present"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "keywords": [
+    "productivity",
+    "focus",
+    "ai",
+    "chrome-extension",
+    "analytics"
+  ],
+  "author": "Flowstate Team",
+  "license": "Apache-2.0"
+}
