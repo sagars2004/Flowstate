@@ -1,7 +1,11 @@
-const path = require('path');
-const CopyWebpackPlugin = require('copy-webpack-plugin');
+import path from 'path';
+import { fileURLToPath } from 'url';
+import CopyWebpackPlugin from 'copy-webpack-plugin';
 
-module.exports = (env, argv) => {
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+export default (env, argv) => {
   const isProduction = argv.mode === 'production';
 
   return {
@@ -25,10 +29,13 @@ module.exports = (env, argv) => {
       ],
     },
     resolve: {
-      extensions: ['.ts', '.js'],
+      extensions: ['.ts', '.js', '.tsx', '.jsx'],
       alias: {
         '@': path.resolve(__dirname, 'src'),
         '@flowstate/shared': path.resolve(__dirname, '../shared/src'),
+      },
+      extensionAlias: {
+        '.js': ['.ts', '.js'],
       },
     },
     plugins: [

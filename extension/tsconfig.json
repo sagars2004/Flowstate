@@ -6,10 +6,10 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "outDir": "./dist",
-    "rootDir": "./src",
 
     /* Emit */
     "declaration": false,
+    "declarationMap": false,
     "sourceMap": true,
 
     /* Chrome Extension specific */

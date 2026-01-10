@@ -9,13 +9,15 @@ This guide covers all the newly implemented features ready for testing.
 
 #### Setup:
 ```bash
-# Build the extension
+# Build the extension (from root)
+npm run build:extension
+
+# Or from extension directory:
 cd extension
 npm run build
-
-# Or from root:
-npm run build:extension
 ```
+
+**Note**: The extension builds successfully and outputs to `extension/dist/` directory.
 
 #### Load in Chrome:
 1. Open Chrome and navigate to `chrome://extensions/`

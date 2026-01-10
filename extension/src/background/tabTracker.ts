@@ -142,12 +142,17 @@ export class TabTracker {
     }
 
     // Aggregate rapid tab switches
+    const firstItem = this.tabSwitchBuffer[0];
+    if (!firstItem) {
+      return;
+    }
+
     const uniqueURLs = new Set(this.tabSwitchBuffer.map((item) => item.url));
     const switchCount = this.tabSwitchBuffer.length;
 
     this.logActivity({
       eventType: 'tab_switch',
-      timestamp: this.tabSwitchBuffer[0].timestamp,
+      timestamp: firstItem.timestamp,
       metadata: {
         rapidSwitch: true,
         switchCount,
