@@ -100,6 +100,7 @@ async function startServer(): Promise<void> {
       console.log(`   - GET    /api/sessions`);
       console.log(`   - GET    /api/sessions/:id`);
       console.log(`   - GET    /api/sessions/:id/statistics`);
+      console.log(`   - GET    /api/sessions/:id/analysis`);
       console.log(`   - PATCH  /api/sessions/:id/end`);
       console.log(`   - DELETE /api/sessions/:id`);
       console.log(`   - POST   /api/activities`);

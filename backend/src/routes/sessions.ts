@@ -104,12 +104,30 @@ export function createSessionRouter(sessionService: SessionService): Router {
     }
   );
 
+  // GET /api/sessions/:id/analysis - Get session with pattern analysis
+  router.get(
+    '/:id/analysis',
+    [param('id').isUUID().withMessage('Invalid session ID'), validateRequest],
+    async (req: Request, res: Response, next: NextFunction) => {
+      try {
+        const sessionWithAnalysis = await sessionService.getSessionWithAnalysis(req.params.id);
+
+        res.json({
+          success: true,
+          data: sessionWithAnalysis,
+        });
+      } catch (error) {
+        next(error);
+      }
+    }
+  );
+
   // PATCH /api/sessions/:id/end - End a session
   router.patch(
     '/:id/end',
     [
       param('id').isUUID().withMessage('Invalid session ID'),
-      body('focusScore').isFloat({ min: 0, max: 100 }).withMessage('focusScore must be between 0 and 100'),
+      body('focusScore').optional().isFloat({ min: 0, max: 100 }).withMessage('focusScore must be between 0 and 100'),
       validateRequest,
     ],
     async (req: Request, res: Response, next: NextFunction) => {
