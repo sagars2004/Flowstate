@@ -36,7 +36,6 @@ function updateUI(): void {
   const connectionElement = document.getElementById('connection');
   const startButton = document.getElementById('start-button') as HTMLButtonElement;
   const endButton = document.getElementById('end-button') as HTMLButtonElement;
-  const openDashboardButton = document.getElementById('open-dashboard') as HTMLButtonElement;
 
   if (!statusElement || !sessionIdElement || !connectionElement || !startButton || !endButton) {
     return;
@@ -70,11 +69,6 @@ function updateUI(): void {
     connectionElement.className = 'connection disconnected';
   }
 
-  if (openDashboardButton) {
-    openDashboardButton.addEventListener('click', () => {
-      chrome.tabs.create({ url: 'http://localhost:5173' });
-    });
-  }
 }
 
 async function startSession(): Promise<void> {
@@ -151,6 +145,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Set up button handlers
   const startButton = document.getElementById('start-button');
   const endButton = document.getElementById('end-button');
+  const openDashboardButton = document.getElementById('open-dashboard');
 
   if (startButton) {
     startButton.addEventListener('click', startSession);
@@ -158,5 +153,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
   if (endButton) {
     endButton.addEventListener('click', endSession);
+  }
+
+  if (openDashboardButton) {
+    openDashboardButton.addEventListener('click', async () => {
+      try {
+        // Try to open dashboard
+        await chrome.tabs.create({ url: 'http://localhost:5173' });
+      } catch (error) {
+        // If frontend not running, show helpful message
+        alert(
+          'Dashboard is not running.\n\n' +
+          'To start it, run:\n' +
+          'npm run dev:frontend\n\n' +
+          'Or from project root:\n' +
+          'npm run dev'
+        );
+        console.error('Failed to open dashboard:', error);
+      }
+    });
   }
 });

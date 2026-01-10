@@ -162,20 +162,31 @@ export class WebSocketClient {
   }
 
   private showNotification(title: string, message: string): void {
-    chrome.notifications.create(
-      {
-        type: 'basic',
-        iconUrl: chrome.runtime.getURL('icons/icon-48.png'),
-        title,
-        message,
-      },
-      (notificationId) => {
-        // Auto-dismiss after 5 seconds
+    // Get icon URL
+    const iconUrl = chrome.runtime.getURL('icons/icon-48.png');
+
+    const notificationOptions: chrome.notifications.NotificationOptions<true> = {
+      type: 'basic',
+      title,
+      message,
+      iconUrl,
+    };
+
+    chrome.notifications.create(notificationOptions, (notificationId) => {
+      // Check for errors in notification creation
+      if (chrome.runtime.lastError) {
+        console.error('Error creating notification:', chrome.runtime.lastError.message);
+        return;
+      }
+
+      // Auto-dismiss after 5 seconds if notification was created successfully
+      if (notificationId && typeof notificationId === 'string') {
         setTimeout(() => {
+          // Clear notification - callback is optional in Manifest V3
           chrome.notifications.clear(notificationId);
         }, 5000);
       }
-    );
+    });
   }
 
   disconnect(): void {
