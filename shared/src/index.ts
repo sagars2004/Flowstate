@@ -7,3 +7,4 @@
 export * from './types/session';
 export * from './types/activity';
 export * from './types/websocket';
+export * from './types/insight';export * from './types/insight';

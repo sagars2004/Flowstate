@@ -8,11 +8,15 @@ import { runMigrations } from './db/migrate.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { SessionRepository } from './repositories/SessionRepository.js';
 import { ActivityRepository } from './repositories/ActivityRepository.js';
+import { InsightRepository } from './repositories/InsightRepository.js';
 import { SessionService } from './services/SessionService.js';
 import { ActivityService } from './services/ActivityService.js';
+import { InsightsService } from './services/InsightsService.js';
 import { createSessionRouter } from './routes/sessions.js';
 import { createActivityRouter } from './routes/activities.js';
+import { createInsightsRouter } from './routes/insights.js';
 import { GroqClient, AIService } from './ai/index.js';
+import { PatternAnalysisService } from './patterns/index.js';
 
 // Load environment variables
 config();
@@ -44,8 +48,10 @@ app.get('/health', (req: Request, res: Response) => {
 // Initialize repositories and services
 const sessionRepository = new SessionRepository(db);
 const activityRepository = new ActivityRepository(db);
+const insightRepository = new InsightRepository(db);
 const sessionService = new SessionService(sessionRepository, activityRepository);
 const activityService = new ActivityService(activityRepository);
+const patternAnalysisService = new PatternAnalysisService();
 
 // Initialize Groq AI
 const groqApiKey = process.env.GROQ_API_KEY;
@@ -64,10 +70,17 @@ const groqClient = groqApiKey
   : null;
 
 const aiService = groqClient ? new AIService(groqClient) : null;
+const insightsService = new InsightsService(
+  insightRepository,
+  activityRepository,
+  aiService,
+  patternAnalysisService
+);
 
 // API routes
 app.use('/api/sessions', createSessionRouter(sessionService));
 app.use('/api/activities', createActivityRouter(activityService));
+app.use('/api/insights', createInsightsRouter(insightsService, sessionRepository));
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -106,6 +119,9 @@ async function startServer(): Promise<void> {
       console.log(`   - POST   /api/activities`);
       console.log(`   - POST   /api/activities/batch`);
       console.log(`   - GET    /api/activities?sessionId=<uuid>`);
+      console.log(`   - POST   /api/insights/:sessionId`);
+      console.log(`   - GET    /api/insights/:sessionId`);
+      console.log(`   - GET    /api/insights/:sessionId/comparison`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
