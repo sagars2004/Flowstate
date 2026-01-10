@@ -12,6 +12,7 @@ import { SessionService } from './services/SessionService.js';
 import { ActivityService } from './services/ActivityService.js';
 import { createSessionRouter } from './routes/sessions.js';
 import { createActivityRouter } from './routes/activities.js';
+import { GroqClient, AIService } from './ai/index.js';
 
 // Load environment variables
 config();
@@ -46,6 +47,24 @@ const activityRepository = new ActivityRepository(db);
 const sessionService = new SessionService(sessionRepository, activityRepository);
 const activityService = new ActivityService(activityRepository);
 
+// Initialize Groq AI
+const groqApiKey = process.env.GROQ_API_KEY;
+if (!groqApiKey) {
+  console.warn('⚠️  GROQ_API_KEY not set. AI features will be disabled.');
+}
+
+const groqClient = groqApiKey
+  ? new GroqClient({
+      apiKey: groqApiKey,
+      model8B: process.env.GROQ_MODEL_8B || 'llama-3.1-8b-instant',
+      model70B: process.env.GROQ_MODEL_70B || 'llama-3.1-70b-versatile',
+      maxTokens: parseInt(process.env.GROQ_MAX_TOKENS || '1000'),
+      temperature: parseFloat(process.env.GROQ_TEMPERATURE || '0.7'),
+    })
+  : null;
+
+const aiService = groqClient ? new AIService(groqClient) : null;
+
 // API routes
 app.use('/api/sessions', createSessionRouter(sessionService));
 app.use('/api/activities', createActivityRouter(activityService));
@@ -75,6 +94,7 @@ async function startServer(): Promise<void> {
       console.log(`🚀 Flowstate backend running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🔌 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🤖 Groq AI: ${aiService ? 'Enabled' : 'Disabled (set GROQ_API_KEY)'}`);
       console.log(`📝 API routes:`);
       console.log(`   - POST   /api/sessions`);
       console.log(`   - GET    /api/sessions`);
@@ -107,4 +127,4 @@ process.on('SIGTERM', async () => {
 
 startServer();
 
-export { app };
+export { app, aiService };
