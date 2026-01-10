@@ -18,6 +18,7 @@
     "build:frontend": "npm run build --workspace=frontend",
     "build:backend": "npm run build --workspace=backend",
     "build:extension": "npm run build --workspace=extension",
+    "db:migrate": "npm run db:migrate --workspace=backend",
     "clean": "rm -rf node_modules frontend/node_modules backend/node_modules extension/node_modules shared/node_modules",
     "lint": "npm run lint --workspaces --if-present",
     "type-check": "npm run type-check --workspaces --if-present"
