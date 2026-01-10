@@ -1,8 +1,47 @@
-import React from 'react';
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSession } from '../context/SessionContext';
+import { useWebSocketContext } from '../context/WebSocketContext';
+import { api } from '../services/api';
+import type { Session } from '@flowstate/shared';
 
 export default function Dashboard(): JSX.Element {
-  const { isSessionActive, currentSession } = useSession();
+  const { isSessionActive, currentSession, completedSessionId } = useSession();
+  const { socket, isConnected } = useWebSocketContext();
+  const navigate = useNavigate();
+
+  // Navigate to report when a session completes
+  useEffect(() => {
+    if (completedSessionId) {
+      console.log('Navigating to completed session report:', completedSessionId);
+      navigate(`/report/${completedSessionId}`);
+    }
+  }, [completedSessionId, navigate]);
+
+  // Load and subscribe to active sessions on mount
+  useEffect(() => {
+    const loadActiveSessions = async (): Promise<void> => {
+      try {
+        // Fetch active sessions from backend
+        const response = await api.get('/api/sessions?status=active&limit=10');
+        const sessions: Session[] = response.data.data || [];
+        
+        // Subscribe to all active sessions to receive end events
+        if (socket && isConnected && sessions.length > 0) {
+          sessions.forEach((session) => {
+            socket.emit('session:subscribe', session.id);
+            console.log('Subscribed to active session:', session.id);
+          });
+        }
+      } catch (error) {
+        console.error('Failed to load active sessions:', error);
+      }
+    };
+
+    if (socket && isConnected) {
+      loadActiveSessions();
+    }
+  }, [socket, isConnected]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
