@@ -1,5 +1,4 @@
 import express, { Express, Request, Response } from 'express';
-import { createServer } from 'http';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -18,7 +17,6 @@ import { createActivityRouter } from './routes/activities.js';
 import { createInsightsRouter } from './routes/insights.js';
 import { GroqClient, AIService } from './ai/index.js';
 import { PatternAnalysisService } from './patterns/index.js';
-import { WebSocketHandler } from './websocket/socketHandler.js';
 
 // Load environment variables
 config();
@@ -65,7 +63,7 @@ const groqClient = groqApiKey
   ? new GroqClient({
       apiKey: groqApiKey,
       model8B: process.env.GROQ_MODEL_8B || 'llama-3.1-8b-instant',
-      model70B: process.env.GROQ_MODEL_70B || 'llama-3.3-70b-versatile',
+      model70B: process.env.GROQ_MODEL_70B || 'llama-3.1-70b-versatile',
       maxTokens: parseInt(process.env.GROQ_MAX_TOKENS || '1000'),
       temperature: parseFloat(process.env.GROQ_TEMPERATURE || '0.7'),
     })
@@ -104,25 +102,12 @@ async function startServer(): Promise<void> {
     await runMigrations();
     console.log('✓ Database migrations complete');
 
-    // Create HTTP server from Express app
-    const httpServer = createServer(app);
-
-    // Initialize WebSocket handler
-    const wsHandler = new WebSocketHandler(
-      httpServer,
-      sessionService,
-      activityService,
-      patternAnalysisService,
-      aiService
-    );
-
-    // Start HTTP server (which includes WebSocket support)
-    httpServer.listen(PORT, () => {
+    // Start HTTP server
+    app.listen(PORT, () => {
       console.log(`🚀 Flowstate backend running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🔌 Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`🤖 Groq AI: ${aiService ? 'Enabled' : 'Disabled (set GROQ_API_KEY)'}`);
-      console.log(`🌐 WebSocket: Enabled on port ${PORT}`);
       console.log(`📝 API routes:`);
       console.log(`   - POST   /api/sessions`);
       console.log(`   - GET    /api/sessions`);
