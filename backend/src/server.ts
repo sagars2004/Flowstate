@@ -6,6 +6,12 @@ import { config } from 'dotenv';
 import { db } from './db/database.js';
 import { runMigrations } from './db/migrate.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { SessionRepository } from './repositories/SessionRepository.js';
+import { ActivityRepository } from './repositories/ActivityRepository.js';
+import { SessionService } from './services/SessionService.js';
+import { ActivityService } from './services/ActivityService.js';
+import { createSessionRouter } from './routes/sessions.js';
+import { createActivityRouter } from './routes/activities.js';
 
 // Load environment variables
 config();
@@ -34,9 +40,15 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// API routes will be added here
-// app.use('/api/sessions', sessionRoutes);
-// app.use('/api/activity', activityRoutes);
+// Initialize repositories and services
+const sessionRepository = new SessionRepository(db);
+const activityRepository = new ActivityRepository(db);
+const sessionService = new SessionService(sessionRepository, activityRepository);
+const activityService = new ActivityService(activityRepository);
+
+// API routes
+app.use('/api/sessions', createSessionRouter(sessionService));
+app.use('/api/activities', createActivityRouter(activityService));
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -56,12 +68,23 @@ async function startServer(): Promise<void> {
   try {
     // Run database migrations
     await runMigrations();
+    console.log('✓ Database migrations complete');
 
     // Start HTTP server
     app.listen(PORT, () => {
       console.log(`🚀 Flowstate backend running on port ${PORT}`);
       console.log(`📊 Health check: http://localhost:${PORT}/health`);
       console.log(`🔌 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`📝 API routes:`);
+      console.log(`   - POST   /api/sessions`);
+      console.log(`   - GET    /api/sessions`);
+      console.log(`   - GET    /api/sessions/:id`);
+      console.log(`   - GET    /api/sessions/:id/statistics`);
+      console.log(`   - PATCH  /api/sessions/:id/end`);
+      console.log(`   - DELETE /api/sessions/:id`);
+      console.log(`   - POST   /api/activities`);
+      console.log(`   - POST   /api/activities/batch`);
+      console.log(`   - GET    /api/activities?sessionId=<uuid>`);
     });
   } catch (error) {
     console.error('Failed to start server:', error);
