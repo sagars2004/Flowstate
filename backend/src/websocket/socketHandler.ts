@@ -29,6 +29,8 @@ export class WebSocketHandler {
   private extensionConnections = new Map<string, Socket>(); // sessionId -> socket
   private frontendConnections = new Map<string, Socket>(); // sessionId -> socket
   private clientMap = new Map<string, ClientConnection>(); // socketId -> connection info
+  private readonly interventionThrottle = new Map<string, number>(); // sessionId -> last intervention time
+  private readonly MIN_INTERVENTION_INTERVAL = 10 * 60 * 1000; // 10 minutes between interventions per session
 
   constructor(
     httpServer: HttpServer,
@@ -146,11 +148,14 @@ export class WebSocketHandler {
           message: 'Session ended successfully',
         });
 
-        // Cleanup connection
-        this.extensionConnections.delete(payload.sessionId);
-        this.clientMap.delete(socket.id);
+    // Cleanup connection
+    this.extensionConnections.delete(payload.sessionId);
+    this.clientMap.delete(socket.id);
+    
+    // Clear intervention throttle for this session
+    this.interventionThrottle.delete(payload.sessionId);
 
-        console.log(`Session ended: ${payload.sessionId}`);
+    console.log(`Session ended: ${payload.sessionId}`);
       } catch (error) {
         console.error('Error ending session:', error);
         socket.emit('error', {
@@ -278,6 +283,15 @@ export class WebSocketHandler {
       return; // AI service not available
     }
 
+    // Throttle interventions per session (max 1 per 10 minutes)
+    const lastIntervention = this.interventionThrottle.get(payload.sessionId);
+    const now = Date.now();
+    if (lastIntervention && now - lastIntervention < this.MIN_INTERVENTION_INTERVAL) {
+      const remainingSeconds = Math.ceil((this.MIN_INTERVENTION_INTERVAL - (now - lastIntervention)) / 1000);
+      console.debug(`Intervention throttled for session ${payload.sessionId}: ${remainingSeconds}s remaining`);
+      return;
+    }
+
     try {
       // Get recent activities for pattern analysis (last 50)
       const allActivities = await this.activityService.getActivitiesBySession(payload.sessionId);
@@ -294,30 +308,51 @@ export class WebSocketHandler {
       if (patterns.length > 0) {
         // Use the first pattern (most recent/relevant)
         const pattern = patterns[0];
-        const intervention = await this.aiService.generateIntervention(pattern);
-
-        // Map pattern type to intervention type/priority
-        const interventionType = this.mapPatternToInterventionType(pattern.type);
-        const priority = this.mapPatternToPriority(pattern.type);
-
-        const interventionPayload: InterventionPayload = {
-          interventionId: `intervention_${Date.now()}`,
-          sessionId: payload.sessionId,
-          message: intervention.message,
-          type: interventionType,
-          priority,
-          timestamp: Date.now(),
-          dismissible: true,
-        };
-
-        // Send to extension
-        const extensionSocket = this.extensionConnections.get(payload.sessionId);
-        if (extensionSocket && extensionSocket.connected) {
-          extensionSocket.emit('intervention:send', interventionPayload);
+        if (!pattern) {
+          return; // Safety check
         }
+        
+        try {
+          const intervention = await this.aiService.generateIntervention(pattern);
 
-        // Also send to frontend if subscribed
-        this.broadcastToFrontend(payload.sessionId, 'intervention:send', interventionPayload);
+          // Map pattern type to intervention type/priority
+          const interventionType = this.mapPatternToInterventionType(pattern.type);
+          const priority = this.mapPatternToPriority(pattern.type);
+
+          const interventionPayload: InterventionPayload = {
+            interventionId: `intervention_${Date.now()}`,
+            sessionId: payload.sessionId,
+            message: intervention.message,
+            type: interventionType,
+            priority,
+            timestamp: Date.now(),
+            dismissible: true,
+          };
+
+          // Record intervention time
+          this.interventionThrottle.set(payload.sessionId, now);
+
+          // Send to extension
+          const extensionSocket = this.extensionConnections.get(payload.sessionId);
+          if (extensionSocket && extensionSocket.connected) {
+            extensionSocket.emit('intervention:send', interventionPayload);
+          }
+
+          // Also send to frontend if subscribed
+          this.broadcastToFrontend(payload.sessionId, 'intervention:send', interventionPayload);
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+          
+          // If rate limited, log but don't throw (will retry on next pattern)
+          if (errorMessage.includes('rate_limit') || errorMessage.includes('Rate limit')) {
+            console.warn(`⚠️  Intervention generation rate limited for session ${payload.sessionId}. Will retry later.`);
+            // Don't record intervention time so it can retry sooner
+            return;
+          }
+          
+          // For other errors, log and continue
+          console.error('Error generating intervention:', error);
+        }
       }
     } catch (error) {
       console.error('Error analyzing pattern and intervening:', error);

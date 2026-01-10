@@ -10,3 +10,5 @@ export {
   type SessionInsights,
   type ComparativeInsight,
 } from './AIService.js';
+export { GroqRateLimiter } from './rateLimiter.js';
+export { RequestQueue } from './requestQueue.js';

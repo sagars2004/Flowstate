@@ -40,11 +40,37 @@ app.use(morgan('dev'));
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {
-  res.json({
+  const healthData: {
+    status: string;
+    timestamp: string;
+    uptime: number;
+    groq?: {
+      enabled: boolean;
+      rateLimit?: {
+        availableTokens: number;
+        queueSize: number;
+        timeUntilNextRequest: number;
+      };
+    };
+  } = {
     status: 'ok',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-  });
+  };
+
+  // Add Groq rate limit stats if available
+  if (groqClient) {
+    healthData.groq = {
+      enabled: true,
+      rateLimit: groqClient.getRateLimitStats(),
+    };
+  } else {
+    healthData.groq = {
+      enabled: false,
+    };
+  }
+
+  res.json(healthData);
 });
 
 // Initialize repositories and services
